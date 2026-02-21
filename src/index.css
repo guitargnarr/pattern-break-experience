@@ -1,0 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Space+Grotesk:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme inline {
+  --font-display: "Cormorant Garamond", serif;
+  --font-body: "Space Grotesk", sans-serif;
+  --color-amber: oklch(0.78 0.1 75);
+  --color-teal: oklch(0.72 0.15 175);
+  --color-silver-blue: oklch(0.72 0.03 240);
+}
+
+:root {
+  --background: #0a0a0e;
+  --foreground: #e8c99b;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: "Space Grotesk", sans-serif;
+    overflow-x: hidden;
+    margin: 0;
+    padding: 0;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Cormorant Garamond", serif;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0a0a0e; }
+::-webkit-scrollbar-thumb { background: #1a1a2e; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #2a2a3e; }
+
+/* Smooth scroll for mouse/trackpad only */
+@media (pointer: fine) {
+  html { scroll-behavior: smooth; }
+}
+
+/* Mobile overscroll prevention */
+html, body {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+body { overscroll-behavior-y: none; }
+
+/* Suppress tap highlight */
+canvas, button { -webkit-tap-highlight-color: transparent; }
+
+/* Mobile touch optimizations */
+@media (pointer: coarse) {
+  body { -webkit-user-select: none; user-select: none; }
+  ::-webkit-scrollbar { display: none; }
+  html { scrollbar-width: none; }
+}
+
+/* iOS Safari viewport height fix */
+@supports (-webkit-touch-callout: none) {
+  .fixed { height: 100dvh; }
+}
+
+/* Keyframes */
+@keyframes scrollArrowPulse {
+  0%, 100% { opacity: 0.3; transform: translateY(0); }
+  50% { opacity: 0.7; transform: translateY(3px); }
+}
+
+@keyframes titleFadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes titleFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  html { scroll-behavior: auto; }
+}
