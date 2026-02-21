@@ -1,105 +1,119 @@
 /**
- * useAmbientAudio -- Procedural ambient audio for The Pattern Break
+ * useAmbientAudio -- Whistling wind for The Pattern Break
  *
- * Scene I   (Gravity Well):  Low drone, claustrophobic, cycling LFO -- stuck
- * Scene II  (The Shatter):   Rising frequency, bright harmonics -- liberation
- * Scene III (The Lattice):   Rhythmic pulses, layered build -- construction
- * Scene IV  (The Forge):     Warm resonance, steady heartbeat -- grounded work
- * Scene V   (Constellation): Ethereal harmonics, open space -- arrival
+ * Fundamentally different from Quiet Trade's oscillator drones.
+ * This engine is built on shaped noise -- bandpass-filtered white noise
+ * with slow organic modulation to simulate wind gusts, lulls, and
+ * whistling harmonics through narrow spaces.
+ *
+ * Scene I   (Gravity Well):  Tight, suffocating wind trapped in a spiral
+ * Scene II  (The Shatter):   Explosive gust, debris whistling outward
+ * Scene III (The Lattice):   Steady crosswind through open structure
+ * Scene IV  (The Forge):     Hot updraft, low roar with high overtones
+ * Scene V   (Constellation): Vast, high-altitude wind -- thin and pure
  */
 
 import { useEffect, useRef, useCallback, useState } from "react";
 
-interface SceneAudioConfig {
-  baseFreq: number;
-  harmonics: number[];
-  harmonicGains: number[];
-  waveform: OscillatorType;
-  filterFreq: number;
-  filterQ: number;
-  lfoRate: number;
-  lfoDepth: number;
-  gain: number;
-  detune: number;
-  noiseLevel: number;
-  filterType: BiquadFilterType;
+interface WindConfig {
+  // Primary wind band
+  bandFreq: number;       // Center frequency of main bandpass
+  bandQ: number;          // Width of band (higher = narrower whistle)
+  bandGain: number;       // Level of main wind
+
+  // Whistle overtone (narrow resonant peak)
+  whistleFreq: number;
+  whistleQ: number;
+  whistleGain: number;
+
+  // Low rumble layer
+  rumbleFreq: number;
+  rumbleGain: number;
+
+  // Gust modulation
+  gustRate: number;       // How fast gusts cycle (Hz)
+  gustDepth: number;      // How much the volume swells (0-1)
+  gustShape: number;      // LFO depth on filter freq (Hz)
+
+  // Reverb wetness
+  reverbWet: number;
 }
 
-const SCENE_CONFIGS: SceneAudioConfig[] = [
-  // I -- Gravity Well: Trapped, cycling, oppressive low drone
+const WIND_CONFIGS: WindConfig[] = [
+  // I -- Gravity Well: Tight spiral, moaning, confined
   {
-    baseFreq: 48.99, // G1 -- heavy, subterranean
-    harmonics: [1, 2, 3, 4, 7],
-    harmonicGains: [1.0, 0.5, 0.25, 0.15, 0.08],
-    waveform: "sine",
-    filterFreq: 280,
-    filterQ: 3.5,
-    lfoRate: 0.12,
-    lfoDepth: 6,
-    gain: 0.10,
-    detune: -3,
-    noiseLevel: 0.010,
-    filterType: "lowpass",
+    bandFreq: 350,
+    bandQ: 1.8,
+    bandGain: 0.12,
+    whistleFreq: 800,
+    whistleQ: 12,
+    whistleGain: 0.03,
+    rumbleFreq: 80,
+    rumbleGain: 0.06,
+    gustRate: 0.15,
+    gustDepth: 0.4,
+    gustShape: 60,
+    reverbWet: 0.2,
   },
-  // II -- The Shatter: Bright, ascending, crystalline breakout
+  // II -- The Shatter: Explosive, wide, debris scatter
   {
-    baseFreq: 196.0, // G3 -- bright, ascending
-    harmonics: [1, 1.5, 2, 3, 5],
-    harmonicGains: [0.7, 0.4, 0.5, 0.3, 0.15],
-    waveform: "sine",
-    filterFreq: 2400,
-    filterQ: 0.6,
-    lfoRate: 0.25,
-    lfoDepth: 12,
-    gain: 0.08,
-    detune: 7,
-    noiseLevel: 0.018,
-    filterType: "bandpass",
+    bandFreq: 1200,
+    bandQ: 0.5,
+    bandGain: 0.14,
+    whistleFreq: 3200,
+    whistleQ: 8,
+    whistleGain: 0.04,
+    rumbleFreq: 120,
+    rumbleGain: 0.08,
+    gustRate: 0.35,
+    gustDepth: 0.6,
+    gustShape: 200,
+    reverbWet: 0.45,
   },
-  // III -- The Lattice: Rhythmic, building, stacking harmonics
+  // III -- The Lattice: Steady through-draft, structural
   {
-    baseFreq: 73.42, // D2 -- constructive
-    harmonics: [1, 2, 3, 4, 6],
-    harmonicGains: [0.9, 0.6, 0.4, 0.3, 0.15],
-    waveform: "triangle",
-    filterFreq: 550,
-    filterQ: 2.0,
-    lfoRate: 0.8,
-    lfoDepth: 10,
-    gain: 0.09,
-    detune: 0,
-    noiseLevel: 0.008,
-    filterType: "lowpass",
+    bandFreq: 600,
+    bandQ: 1.2,
+    bandGain: 0.10,
+    whistleFreq: 1800,
+    whistleQ: 15,
+    whistleGain: 0.025,
+    rumbleFreq: 90,
+    rumbleGain: 0.04,
+    gustRate: 0.22,
+    gustDepth: 0.3,
+    gustShape: 80,
+    reverbWet: 0.3,
   },
-  // IV -- The Forge: Warm, molten, steady pulse
+  // IV -- The Forge: Hot updraft, furnace roar, high singing
   {
-    baseFreq: 110.0, // A2 -- warm, grounded
-    harmonics: [1, 2, 2.5, 3, 4],
-    harmonicGains: [1.0, 0.5, 0.3, 0.2, 0.1],
-    waveform: "sine",
-    filterFreq: 700,
-    filterQ: 1.8,
-    lfoRate: 0.4,
-    lfoDepth: 8,
-    gain: 0.11,
-    detune: -2,
-    noiseLevel: 0.006,
-    filterType: "lowpass",
+    bandFreq: 450,
+    bandQ: 1.0,
+    bandGain: 0.13,
+    whistleFreq: 2400,
+    whistleQ: 18,
+    whistleGain: 0.035,
+    rumbleFreq: 60,
+    rumbleGain: 0.09,
+    gustRate: 0.18,
+    gustDepth: 0.35,
+    gustShape: 50,
+    reverbWet: 0.25,
   },
-  // V -- The Constellation: Ethereal, wide, harmonic series
+  // V -- Constellation: High altitude, thin, pure, vast
   {
-    baseFreq: 146.83, // D3 -- resolved, open
-    harmonics: [1, 1.5, 2, 3, 4],
-    harmonicGains: [0.6, 0.5, 0.4, 0.25, 0.15],
-    waveform: "sine",
-    filterFreq: 1800,
-    filterQ: 0.5,
-    lfoRate: 0.06,
-    lfoDepth: 4,
-    gain: 0.10,
-    detune: 3,
-    noiseLevel: 0.005,
-    filterType: "lowpass",
+    bandFreq: 2000,
+    bandQ: 0.8,
+    bandGain: 0.08,
+    whistleFreq: 4500,
+    whistleQ: 20,
+    whistleGain: 0.02,
+    rumbleFreq: 100,
+    rumbleGain: 0.02,
+    gustRate: 0.08,
+    gustDepth: 0.5,
+    gustShape: 300,
+    reverbWet: 0.55,
   },
 ];
 
@@ -134,114 +148,194 @@ function getSceneBlend(progress: number): { sceneA: number; sceneB: number; blen
   return { sceneA: 0, sceneB: 0, blend: 0, masterGain: 0 };
 }
 
-function lerpConfig(a: SceneAudioConfig, b: SceneAudioConfig, t: number): SceneAudioConfig {
+function lerpConfig(a: WindConfig, b: WindConfig, t: number): WindConfig {
   const lerp = (x: number, y: number) => x + (y - x) * t;
   return {
-    baseFreq: lerp(a.baseFreq, b.baseFreq),
-    harmonics: a.harmonics.length >= b.harmonics.length ? a.harmonics : b.harmonics,
-    harmonicGains: a.harmonicGains.map((g, i) => lerp(g, b.harmonicGains[i] ?? 0)),
-    waveform: t < 0.5 ? a.waveform : b.waveform,
-    filterFreq: lerp(a.filterFreq, b.filterFreq),
-    filterQ: lerp(a.filterQ, b.filterQ),
-    lfoRate: lerp(a.lfoRate, b.lfoRate),
-    lfoDepth: lerp(a.lfoDepth, b.lfoDepth),
-    gain: lerp(a.gain, b.gain),
-    detune: lerp(a.detune, b.detune),
-    noiseLevel: lerp(a.noiseLevel, b.noiseLevel),
-    filterType: t < 0.5 ? a.filterType : b.filterType,
+    bandFreq: lerp(a.bandFreq, b.bandFreq),
+    bandQ: lerp(a.bandQ, b.bandQ),
+    bandGain: lerp(a.bandGain, b.bandGain),
+    whistleFreq: lerp(a.whistleFreq, b.whistleFreq),
+    whistleQ: lerp(a.whistleQ, b.whistleQ),
+    whistleGain: lerp(a.whistleGain, b.whistleGain),
+    rumbleFreq: lerp(a.rumbleFreq, b.rumbleFreq),
+    rumbleGain: lerp(a.rumbleGain, b.rumbleGain),
+    gustRate: lerp(a.gustRate, b.gustRate),
+    gustDepth: lerp(a.gustDepth, b.gustDepth),
+    gustShape: lerp(a.gustShape, b.gustShape),
+    reverbWet: lerp(a.reverbWet, b.reverbWet),
   };
 }
 
-interface AudioNodes {
+interface WindNodes {
   ctx: AudioContext;
-  oscillators: OscillatorNode[];
-  oscillatorGains: GainNode[];
-  filter: BiquadFilterNode;
-  lfo: OscillatorNode;
-  lfoGain: GainNode;
-  noiseSource: AudioBufferSourceNode | null;
-  noiseGain: GainNode;
-  masterGain: GainNode;
+
+  // Noise source (shared)
+  noiseSource: AudioBufferSourceNode;
+
+  // Primary wind band
+  bandFilter: BiquadFilterNode;
+  bandGain: GainNode;
+
+  // Whistle resonance
+  whistleFilter: BiquadFilterNode;
+  whistleGain: GainNode;
+
+  // Low rumble
+  rumbleFilter: BiquadFilterNode;
+  rumbleGain: GainNode;
+
+  // Gust modulation LFOs
+  gustLfo: OscillatorNode;
+  gustLfoGain: GainNode;          // modulates master volume
+  gustFilterLfo: OscillatorNode;
+  gustFilterLfoGain: GainNode;    // modulates band filter freq
+
+  // Second gust LFO (slower, for whistle variation)
+  gustLfo2: OscillatorNode;
+  gustLfo2Gain: GainNode;
+
+  // Reverb
   convolver: ConvolverNode;
-  convolverGain: GainNode;
+  reverbGain: GainNode;
   dryGain: GainNode;
+
+  // Master
+  masterGain: GainNode;
 }
 
 export function useAmbientAudio(progress: number) {
-  const nodesRef = useRef<AudioNodes | null>(null);
+  const nodesRef = useRef<WindNodes | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const animFrameRef = useRef<number>(0);
 
   const initAudio = useCallback(() => {
     if (nodesRef.current) return;
     try {
       const ctx = new AudioContext();
-      const masterGain = ctx.createGain();
-      masterGain.gain.value = 0;
 
-      const convolver = ctx.createConvolver();
-      const len = ctx.sampleRate * 3;
-      const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+      // --- Noise source (4s looped buffer) ---
+      const noiseBuf = ctx.createBuffer(2, ctx.sampleRate * 4, ctx.sampleRate);
       for (let ch = 0; ch < 2; ch++) {
-        const d = buf.getChannelData(ch);
-        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.5);
+        const d = noiseBuf.getChannelData(ch);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
       }
-      convolver.buffer = buf;
-
-      const convolverGain = ctx.createGain();
-      convolverGain.gain.value = 0.3;
-      const dryGain = ctx.createGain();
-      dryGain.gain.value = 0.7;
-
-      const filter = ctx.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.frequency.value = 280;
-      filter.Q.value = 3.5;
-
-      const lfo = ctx.createOscillator();
-      lfo.type = "sine";
-      lfo.frequency.value = 0.12;
-      const lfoGain = ctx.createGain();
-      lfoGain.gain.value = 6;
-      lfo.connect(lfoGain);
-      lfoGain.connect(filter.frequency);
-      lfo.start();
-
-      const oscillators: OscillatorNode[] = [];
-      const oscillatorGains: GainNode[] = [];
-      for (let i = 0; i < 5; i++) {
-        const osc = ctx.createOscillator();
-        osc.type = "sine";
-        osc.frequency.value = 48.99 * (i + 1);
-        const gain = ctx.createGain();
-        gain.gain.value = 0;
-        osc.connect(gain);
-        gain.connect(filter);
-        osc.start();
-        oscillators.push(osc);
-        oscillatorGains.push(gain);
-      }
-
-      const noiseGain = ctx.createGain();
-      noiseGain.gain.value = 0;
-      const noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-      const nd = noiseBuf.getChannelData(0);
-      for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
       const noiseSource = ctx.createBufferSource();
       noiseSource.buffer = noiseBuf;
       noiseSource.loop = true;
-      noiseSource.connect(noiseGain);
-      noiseGain.connect(filter);
+
+      // --- Primary wind band (bandpass) ---
+      const bandFilter = ctx.createBiquadFilter();
+      bandFilter.type = "bandpass";
+      bandFilter.frequency.value = 350;
+      bandFilter.Q.value = 1.8;
+      const bandGain = ctx.createGain();
+      bandGain.gain.value = 0;
+
+      // --- Whistle resonance (very narrow bandpass) ---
+      const whistleFilter = ctx.createBiquadFilter();
+      whistleFilter.type = "bandpass";
+      whistleFilter.frequency.value = 800;
+      whistleFilter.Q.value = 12;
+      const whistleGain = ctx.createGain();
+      whistleGain.gain.value = 0;
+
+      // --- Low rumble (lowpass) ---
+      const rumbleFilter = ctx.createBiquadFilter();
+      rumbleFilter.type = "lowpass";
+      rumbleFilter.frequency.value = 80;
+      rumbleFilter.Q.value = 1.0;
+      const rumbleGain = ctx.createGain();
+      rumbleGain.gain.value = 0;
+
+      // --- Connect noise to all three bands ---
+      noiseSource.connect(bandFilter);
+      noiseSource.connect(whistleFilter);
+      noiseSource.connect(rumbleFilter);
+      bandFilter.connect(bandGain);
+      whistleFilter.connect(whistleGain);
+      rumbleFilter.connect(rumbleGain);
+
+      // --- Gust LFO (modulates master gain for swells) ---
+      const gustLfo = ctx.createOscillator();
+      gustLfo.type = "sine";
+      gustLfo.frequency.value = 0.15;
+      const gustLfoGain = ctx.createGain();
+      gustLfoGain.gain.value = 0.4;
+
+      // --- Gust filter LFO (modulates band center freq for movement) ---
+      const gustFilterLfo = ctx.createOscillator();
+      gustFilterLfo.type = "sine";
+      gustFilterLfo.frequency.value = 0.07; // slower than volume gust
+      const gustFilterLfoGain = ctx.createGain();
+      gustFilterLfoGain.gain.value = 60;
+
+      // --- Second whistle LFO (very slow pitch drift) ---
+      const gustLfo2 = ctx.createOscillator();
+      gustLfo2.type = "sine";
+      gustLfo2.frequency.value = 0.04;
+      const gustLfo2Gain = ctx.createGain();
+      gustLfo2Gain.gain.value = 100;
+
+      // LFO connections
+      gustLfo.connect(gustLfoGain);
+      gustFilterLfo.connect(gustFilterLfoGain);
+      gustFilterLfoGain.connect(bandFilter.frequency);
+      gustLfo2.connect(gustLfo2Gain);
+      gustLfo2Gain.connect(whistleFilter.frequency);
+
+      gustLfo.start();
+      gustFilterLfo.start();
+      gustLfo2.start();
       noiseSource.start();
 
-      filter.connect(dryGain);
-      filter.connect(convolver);
-      convolver.connect(convolverGain);
+      // --- Reverb (longer tail for wind) ---
+      const convolver = ctx.createConvolver();
+      const reverbLen = ctx.sampleRate * 4;
+      const reverbBuf = ctx.createBuffer(2, reverbLen, ctx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = reverbBuf.getChannelData(ch);
+        for (let i = 0; i < reverbLen; i++) {
+          d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / reverbLen, 2.0);
+        }
+      }
+      convolver.buffer = reverbBuf;
+
+      const reverbGain = ctx.createGain();
+      reverbGain.gain.value = 0.3;
+      const dryGain = ctx.createGain();
+      dryGain.gain.value = 0.7;
+
+      // --- Master ---
+      const masterGain = ctx.createGain();
+      masterGain.gain.value = 0;
+
+      // Gust LFO -> master gain modulation
+      gustLfoGain.connect(masterGain.gain);
+
+      // Mix bus -> dry/wet -> master
+      const mixBus = ctx.createGain();
+      mixBus.gain.value = 1;
+      bandGain.connect(mixBus);
+      whistleGain.connect(mixBus);
+      rumbleGain.connect(mixBus);
+
+      mixBus.connect(dryGain);
+      mixBus.connect(convolver);
+      convolver.connect(reverbGain);
       dryGain.connect(masterGain);
-      convolverGain.connect(masterGain);
+      reverbGain.connect(masterGain);
       masterGain.connect(ctx.destination);
 
-      nodesRef.current = { ctx, oscillators, oscillatorGains, filter, lfo, lfoGain, noiseSource, noiseGain, masterGain, convolver, convolverGain, dryGain };
+      nodesRef.current = {
+        ctx, noiseSource,
+        bandFilter, bandGain,
+        whistleFilter, whistleGain,
+        rumbleFilter, rumbleGain,
+        gustLfo, gustLfoGain,
+        gustFilterLfo, gustFilterLfoGain,
+        gustLfo2, gustLfo2Gain,
+        convolver, reverbGain, dryGain,
+        masterGain,
+      };
     } catch (e) {
       console.warn("Web Audio unavailable:", e);
     }
@@ -255,7 +349,7 @@ export function useAmbientAudio(progress: number) {
     const now = nodes.ctx.currentTime;
     nodes.masterGain.gain.cancelScheduledValues(now);
     nodes.masterGain.gain.setValueAtTime(nodes.masterGain.gain.value, now);
-    nodes.masterGain.gain.linearRampToValueAtTime(1, now + 1.5);
+    nodes.masterGain.gain.linearRampToValueAtTime(1, now + 2.0);
     setIsPlaying(true);
   }, [initAudio]);
 
@@ -265,73 +359,89 @@ export function useAmbientAudio(progress: number) {
     const now = nodes.ctx.currentTime;
     nodes.masterGain.gain.cancelScheduledValues(now);
     nodes.masterGain.gain.setValueAtTime(nodes.masterGain.gain.value, now);
-    nodes.masterGain.gain.linearRampToValueAtTime(0, now + 1);
+    nodes.masterGain.gain.linearRampToValueAtTime(0, now + 1.5);
     setIsPlaying(false);
   }, []);
 
-  const toggleAudio = useCallback(() => { isPlaying ? stopAudio() : startAudio(); }, [isPlaying, startAudio, stopAudio]);
+  const toggleAudio = useCallback(() => {
+    isPlaying ? stopAudio() : startAudio();
+  }, [isPlaying, startAudio, stopAudio]);
 
+  // --- Update wind parameters based on scroll progress ---
   useEffect(() => {
     if (!nodesRef.current || !isPlaying) return;
     const nodes = nodesRef.current;
     const now = nodes.ctx.currentTime;
-    const ramp = 0.15;
+    const ramp = 0.25; // slightly longer ramp for organic transitions
+
     const { sceneA, sceneB, blend, masterGain: masterLevel } = getSceneBlend(progress);
-    const config = blend > 0.001 ? lerpConfig(SCENE_CONFIGS[sceneA], SCENE_CONFIGS[sceneB], blend) : SCENE_CONFIGS[sceneA];
+    const config = blend > 0.001
+      ? lerpConfig(WIND_CONFIGS[sceneA], WIND_CONFIGS[sceneB], blend)
+      : WIND_CONFIGS[sceneA];
 
-    for (let i = 0; i < 5; i++) {
-      const freq = config.baseFreq * (config.harmonics[i] ?? 0);
-      const gain = (config.harmonicGains[i] ?? 0) * config.gain * masterLevel;
-      nodes.oscillators[i].frequency.cancelScheduledValues(now);
-      nodes.oscillators[i].frequency.setValueAtTime(nodes.oscillators[i].frequency.value, now);
-      nodes.oscillators[i].frequency.linearRampToValueAtTime(freq || 20, now + ramp);
-      nodes.oscillators[i].detune.cancelScheduledValues(now);
-      nodes.oscillators[i].detune.setValueAtTime(nodes.oscillators[i].detune.value, now);
-      nodes.oscillators[i].detune.linearRampToValueAtTime(config.detune, now + ramp);
-      if (i < config.harmonics.length) nodes.oscillators[i].type = config.waveform;
-      nodes.oscillatorGains[i].gain.cancelScheduledValues(now);
-      nodes.oscillatorGains[i].gain.setValueAtTime(nodes.oscillatorGains[i].gain.value, now);
-      nodes.oscillatorGains[i].gain.linearRampToValueAtTime(Math.max(0, gain), now + ramp);
-    }
+    // Primary wind band
+    nodes.bandFilter.frequency.cancelScheduledValues(now);
+    nodes.bandFilter.frequency.setValueAtTime(nodes.bandFilter.frequency.value, now);
+    nodes.bandFilter.frequency.linearRampToValueAtTime(config.bandFreq, now + ramp);
+    nodes.bandFilter.Q.cancelScheduledValues(now);
+    nodes.bandFilter.Q.setValueAtTime(nodes.bandFilter.Q.value, now);
+    nodes.bandFilter.Q.linearRampToValueAtTime(config.bandQ, now + ramp);
+    nodes.bandGain.gain.cancelScheduledValues(now);
+    nodes.bandGain.gain.setValueAtTime(nodes.bandGain.gain.value, now);
+    nodes.bandGain.gain.linearRampToValueAtTime(config.bandGain * masterLevel, now + ramp);
 
-    nodes.filter.type = config.filterType;
-    nodes.filter.frequency.cancelScheduledValues(now);
-    nodes.filter.frequency.setValueAtTime(nodes.filter.frequency.value, now);
-    nodes.filter.frequency.linearRampToValueAtTime(config.filterFreq, now + ramp);
-    nodes.filter.Q.cancelScheduledValues(now);
-    nodes.filter.Q.setValueAtTime(nodes.filter.Q.value, now);
-    nodes.filter.Q.linearRampToValueAtTime(config.filterQ, now + ramp);
+    // Whistle
+    nodes.whistleFilter.frequency.cancelScheduledValues(now);
+    nodes.whistleFilter.frequency.setValueAtTime(nodes.whistleFilter.frequency.value, now);
+    nodes.whistleFilter.frequency.linearRampToValueAtTime(config.whistleFreq, now + ramp);
+    nodes.whistleFilter.Q.cancelScheduledValues(now);
+    nodes.whistleFilter.Q.setValueAtTime(nodes.whistleFilter.Q.value, now);
+    nodes.whistleFilter.Q.linearRampToValueAtTime(config.whistleQ, now + ramp);
+    nodes.whistleGain.gain.cancelScheduledValues(now);
+    nodes.whistleGain.gain.setValueAtTime(nodes.whistleGain.gain.value, now);
+    nodes.whistleGain.gain.linearRampToValueAtTime(config.whistleGain * masterLevel, now + ramp);
 
-    nodes.lfo.frequency.cancelScheduledValues(now);
-    nodes.lfo.frequency.setValueAtTime(nodes.lfo.frequency.value, now);
-    nodes.lfo.frequency.linearRampToValueAtTime(config.lfoRate, now + ramp);
-    nodes.lfoGain.gain.cancelScheduledValues(now);
-    nodes.lfoGain.gain.setValueAtTime(nodes.lfoGain.gain.value, now);
-    nodes.lfoGain.gain.linearRampToValueAtTime(config.lfoDepth, now + ramp);
+    // Rumble
+    nodes.rumbleFilter.frequency.cancelScheduledValues(now);
+    nodes.rumbleFilter.frequency.setValueAtTime(nodes.rumbleFilter.frequency.value, now);
+    nodes.rumbleFilter.frequency.linearRampToValueAtTime(config.rumbleFreq, now + ramp);
+    nodes.rumbleGain.gain.cancelScheduledValues(now);
+    nodes.rumbleGain.gain.setValueAtTime(nodes.rumbleGain.gain.value, now);
+    nodes.rumbleGain.gain.linearRampToValueAtTime(config.rumbleGain * masterLevel, now + ramp);
 
-    nodes.noiseGain.gain.cancelScheduledValues(now);
-    nodes.noiseGain.gain.setValueAtTime(nodes.noiseGain.gain.value, now);
-    nodes.noiseGain.gain.linearRampToValueAtTime(config.noiseLevel * masterLevel, now + ramp);
+    // Gust modulation
+    nodes.gustLfo.frequency.cancelScheduledValues(now);
+    nodes.gustLfo.frequency.setValueAtTime(nodes.gustLfo.frequency.value, now);
+    nodes.gustLfo.frequency.linearRampToValueAtTime(config.gustRate, now + ramp);
+    nodes.gustLfoGain.gain.cancelScheduledValues(now);
+    nodes.gustLfoGain.gain.setValueAtTime(nodes.gustLfoGain.gain.value, now);
+    nodes.gustLfoGain.gain.linearRampToValueAtTime(config.gustDepth * masterLevel, now + ramp);
 
-    const wetLevel = sceneA === 4 || sceneB === 4 ? 0.5 : sceneA === 1 || sceneB === 1 ? 0.45 : 0.25;
-    nodes.convolverGain.gain.cancelScheduledValues(now);
-    nodes.convolverGain.gain.setValueAtTime(nodes.convolverGain.gain.value, now);
-    nodes.convolverGain.gain.linearRampToValueAtTime(wetLevel, now + ramp);
+    // Filter frequency modulation (wind movement)
+    nodes.gustFilterLfoGain.gain.cancelScheduledValues(now);
+    nodes.gustFilterLfoGain.gain.setValueAtTime(nodes.gustFilterLfoGain.gain.value, now);
+    nodes.gustFilterLfoGain.gain.linearRampToValueAtTime(config.gustShape, now + ramp);
+
+    // Reverb mix
+    nodes.reverbGain.gain.cancelScheduledValues(now);
+    nodes.reverbGain.gain.setValueAtTime(nodes.reverbGain.gain.value, now);
+    nodes.reverbGain.gain.linearRampToValueAtTime(config.reverbWet, now + ramp);
     nodes.dryGain.gain.cancelScheduledValues(now);
     nodes.dryGain.gain.setValueAtTime(nodes.dryGain.gain.value, now);
-    nodes.dryGain.gain.linearRampToValueAtTime(1 - wetLevel, now + ramp);
+    nodes.dryGain.gain.linearRampToValueAtTime(1 - config.reverbWet, now + ramp);
   }, [progress, isPlaying]);
 
+  // Cleanup
   useEffect(() => {
     return () => {
       if (nodesRef.current) {
-        nodesRef.current.oscillators.forEach(o => { try { o.stop(); } catch {} });
-        try { nodesRef.current.lfo.stop(); } catch {}
-        try { nodesRef.current.noiseSource?.stop(); } catch {}
+        try { nodesRef.current.noiseSource.stop(); } catch {}
+        try { nodesRef.current.gustLfo.stop(); } catch {}
+        try { nodesRef.current.gustFilterLfo.stop(); } catch {}
+        try { nodesRef.current.gustLfo2.stop(); } catch {}
         try { nodesRef.current.ctx.close(); } catch {}
         nodesRef.current = null;
       }
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, []);
 
